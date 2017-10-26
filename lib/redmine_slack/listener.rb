@@ -1,4 +1,5 @@
 require 'httpclient'
+require 'nokogiri'
 
 class SlackListener < Redmine::Hook::Listener
 	def controller_issues_new_after_save(context={})
@@ -10,10 +11,10 @@ class SlackListener < Redmine::Hook::Listener
 		return unless channel and url
 		return if issue.is_private?
 
-		msg = "[#{escape issue.project}] #{escape issue.author} created <#{object_url issue}|#{escape issue}>#{mentions issue.description}"
+		msg = "[#{escape issue.project}] #{escape issue.author} created <#{object_url issue}|#{escape issue}>#{mentions html2txt(issue.description)}"
 
 		attachment = {}
-		attachment[:text] = escape issue.description if issue.description
+		attachment[:text] = escape html2txt(issue.description) if issue.description
 		attachment[:fields] = [{
 			:title => I18n.t("field_status"),
 			:value => escape(issue.status.to_s),
@@ -48,10 +49,10 @@ class SlackListener < Redmine::Hook::Listener
 		return if issue.is_private?
 		return if journal.private_notes?
 
-		msg = "[#{escape issue.project}] #{escape journal.user.to_s} updated <#{object_url issue}|#{escape issue}>#{mentions journal.notes}"
+		msg = "[#{escape issue.project}] #{escape journal.user.to_s} updated <#{object_url issue}|#{escape issue}>#{mentions html2txt(journal.notes)}"
 
 		attachment = {}
-		attachment[:text] = escape journal.notes if journal.notes
+		attachment[:text] = escape html2txt(journal.notes) if journal.notes
 		attachment[:fields] = journal.details.map { |d| detail_to_field d }
 
 		speak msg, channel, attachment, url
@@ -165,7 +166,11 @@ private
 	def escape(msg)
 		msg.to_s.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;")
 	end
-
+	def html2txt(str)
+		document = Nokogiri::HTML.parse(str)
+		document.css("br").each { |node| node.replace("\n") }
+		document.text
+	end
 	def object_url(obj)
 		if Setting.host_name.to_s =~ /\A(https?\:\/\/)?(.+?)(\:(\d+))?(\/.+)?\z/i
 			host, port, prefix = $2, $4, $5
